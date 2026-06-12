@@ -312,7 +312,6 @@ def dst2abs(func: Callable) -> Closure:
                     raise e from None
                 dst: PathLink = join(dirname(name), dst)
         func(path, dst)
-        path.name = dst
         return dst
     return core
 
@@ -694,8 +693,28 @@ class Path(ReadOnly):
             dst: Union[PathType, PathLink],
             /, *,
             copy_function: Callable[[PathLink, PathLink], None] = copy2
-    ) -> None:
+    ) -> PathLink:
+        if isinstance(dst, (bytes, str)):
+            try:
+                singlename: bool = basename(dst) == dst
+            except TypeError:
+                raise ex.DestinationPathTypeError(
+                    'destination path type can only be "bytes" or "str", '
+                    f'not "{dst.__class__.__name__}".'
+                ) from None
+            if singlename:
+                try:
+                    dst: PathLink = join(dirname(self), dst)
+                except TypeError as e:
+                    if dst.__class__ is bytes:
+                        name: bytes = self.name.encode()
+                    elif dst.__class__ is str:
+                        name: str = self.name.decode()
+                    else:
+                        raise e from None
+                    dst: PathLink = join(dirname(name), dst)
         move(self, dst, copy_function=copy_function)
+        return dst
 
     def copystat(self, dst: Union[PathType, PathLink], /) -> None:
         copystat(self, dst, follow_symlinks=self.follow_symlinks)
@@ -993,13 +1012,18 @@ class Directory(Path):
         for name in listdir(self):
             path: PathLink = join(self, name)
             if isdir(path):
-                rmtree(path, ignore_errors=ignore_errors, onerror=onerror)
+                try:
+                    rmtree(path, ignore_errors=ignore_errors, onerror=onerror)
+                except FileNotFoundError:
+                    pass
             else:
                 try:
-                    remove(self)
+                    remove(path)
                 except FileNotFoundError:
-                    if not ignore_errors:
-                        raise
+                    # A file that vanished between listdir() and remove() is a
+                    # normal race condition (e.g. concurrent cleanup), not a
+                    # real error — suppress unconditionally.
+                    pass
 
     def mkdir(self, mode: int = 0o777, *, ignore_exists: bool = False) -> None:
         try:

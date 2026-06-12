@@ -466,7 +466,10 @@ class Path:
         Backstory about providing this method
             https://github.com/gqylpy/systempath/issues/1
 
-        @return: The parameter `dst` is passed in, without any modification.
+        @return:
+            The resolved destination path. If the destination is a relative
+            single name, it is resolved against the source's parent directory
+            (consistent with `rename`).
         """
 
     def copystat(
