@@ -466,7 +466,14 @@ class Path:
         Backstory about providing this method
             https://github.com/gqylpy/systempath/issues/1
 
-        @return: The parameter `dst` is passed in, without any modification.
+        After the move, `self.name` is updated to the real final location (for
+        example `dst/basename` when `dst` is an existing directory), so the path
+        object stays consistent with the file on disk, the same way `rename`,
+        `renames` and `replace` do. If the move fails, `self.name` is left
+        unchanged.
+
+        @return: The new path link after the move (equal to the updated
+            `self.name`).
         """
 
     def copystat(

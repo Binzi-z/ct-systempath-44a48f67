@@ -673,7 +673,11 @@ class Path(ReadOnly):
         else:
             try:
                 remove(self)
-            except FileNotFoundError:
+            except OSError:
+                # Tolerate the path being already gone or removed concurrently
+                # when the caller opted into `ignore_errors` (e.g. two cleanups
+                # racing on the same directory). Without `ignore_errors` the
+                # error still propagates, so behavior is unchanged by default.
                 if not ignore_errors:
                     raise
 
@@ -694,8 +698,21 @@ class Path(ReadOnly):
             dst: Union[PathType, PathLink],
             /, *,
             copy_function: Callable[[PathLink, PathLink], None] = copy2
-    ) -> None:
-        move(self, dst, copy_function=copy_function)
+    ) -> PathLink:
+        # Keep `self.name` synchronized with the real on-disk location after the
+        # move, consistent with `rename`, `renames` and `replace` (see
+        # `dst2abs`). `shutil.move` returns the actual final destination, which
+        # also accounts for moving *into* an existing directory (dst/basename).
+        # `dst` is normalized to a path link first so the stored name is always
+        # `bytes`/`str` (never a `Path` instance). If the move raises, the
+        # assignment is skipped and the object keeps pointing at the original
+        # path, so it is never left in a half-moved state.
+        self.name = move(
+            self,
+            dst.name if isinstance(dst, Path) else dst,
+            copy_function=copy_function
+        )
+        return self.name
 
     def copystat(self, dst: Union[PathType, PathLink], /) -> None:
         copystat(self, dst, follow_symlinks=self.follow_symlinks)
